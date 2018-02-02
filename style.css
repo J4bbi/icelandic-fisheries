@@ -1,0 +1,30 @@
+body {
+    margin: 0;
+    background-image: url("http://riverbreak.com/wp-content/uploads/background-waves-01.png");
+}
+
+.background {
+     fill: none;
+     pointer-events: all;
+}
+
+#title {
+    font-size: 48px;
+}
+
+.legend {        
+    fill: none;
+}
+
+.active {
+    fill: orange;
+    /*border-width: 20px;*/
+}
+
+.legends circle {
+	opacity: 0.4;
+}
+
+select {
+	margin-top: 10px;
+}

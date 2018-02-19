@@ -1,6 +1,11 @@
-body {
+html, body, svg, div {
     margin: 0;
-    background-image: url("http://riverbreak.com/wp-content/uploads/background-waves-01.png");
+    padding: 0;
+    border: 0;
+}
+
+body {
+    background-image: url("background-waves-c.png");
 }
 
 .background {
@@ -25,6 +30,6 @@ body {
 	opacity: 0.4;
 }
 
-select {
-	margin-top: 10px;
+.text {
+    line-height: 2.4em;
 }

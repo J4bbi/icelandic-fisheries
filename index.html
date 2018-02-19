@@ -1,11 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-	<title>Aflamagn l�ndunarhafna</title>
+	<title>Aflamagn löndunarhafna</title>
 	<script src="d3.v4.min.js" charset="utf-8"></script>
 	<script src="topojson.v2.min.js"></script>
   <link rel="stylesheet" type="text/css" href="style.css">
   <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+  <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 </head>
 <body>
@@ -13,8 +14,10 @@
 	<script>
 		// Width and Height of the whole visualization
 var width = document.body.clientWidth, //window.innerWidth,
-    height = window.innerHeight,
-    centered, text, scale, circles, themax, render, tegundir;
+    height = window.innerHeight-6,
+    centered, text, circles, ports, completeDataset, subDataset, tegundir, legends, infoText, infoText2;
+
+var legend = { 'width': Math.max(300, Math.min(500, width/6)), 'height': Math.min(height*.8,180+(5*2*60)+40), 'scaleMax': (width > 1400) ? 60: 40, 'scaleMin': 10, "transition": 500, 'margin': 20 }
 
 // Global control variables
 var selectedAr = 0; // 0 == 2016
@@ -27,37 +30,48 @@ var svg = d3.select("body")
     .attr("width", width)
     .attr("height", height);
 
-// Rect for zoom on click
-svg.append("svg:rect")
-    .attr("class", "background")
-    .attr("width", width)
-    .attr("height", height)
-    .on("click", clicked);
-
 // Append empty placeholder g element to the SVG
 // g will contain geometry elements
 var g = svg.append("g");
-var ports = null;
 
-// Legend
-var legend = svg.append("g");
-  legend.append("rect").attr("x", height/16).attr("y", 64).attr("width", 350).attr("height", 800).attr("style", "fill: white;stroke-width:2;stroke:rgb(0,0,0); fill-opacity: 0.4;");
-var formContainer = legend.append("svg:foreignObject").attr("width", 350).attr("height", 200).attr("x", height/16).attr("y", 64).append("xhtml:div").append("xhtml:form");
+// Left legends
+var leftLegend = svg.append("g");
+  leftLegend.append("rect")
+    .attr("x", legend.margin)
+    .attr("y", legend.margin)
+    .attr("width", legend.width)
+    .attr("height", legend.height)
+    .attr("style", "fill: white; stroke-width:2; stroke:rgb(0,0,0); fill-opacity: 0.4;");
 
-var legends = null;
+var infoBox = leftLegend.append("svg:foreignObject")
+    .attr("width", legend.width - legend.margin)
+    .attr("height", 180)
+    .attr("x", legend.margin)
+    .attr("y", legend.margin)
+    .append("xhtml:div");
+
+var formContainer = infoBox.append("xhtml:form");
  
 function showText(d, circle) {
   text
     .attr("y", circle.cy.baseVal.value + 8 + "px")
     .attr("x", circle.cx.baseVal.value + 18 + "px")
     .text(d.properties.nafn + " (" + addDot(d.properties.afli) + " t.)")
-    .style("visibility", "visible");
+
+  var bBox = text.node().getBoundingClientRect();
+
+  if(bBox.left + bBox.width > width)  { // If text exits screen to right
+    text.attr("x", circle.cx.baseVal.value  - 18 - bBox.width + "px")    
+  }
+
+  text.style("visibility", "visible");
+
 }
 
 // Width and Height of the whole visualization
 // Set Projection Parameters
 var projection = d3.geoConicConformal()
-  	.center([-1.0, 65])
+  	.center([-2.5, 64.8])
 	  .parallels([63, 68])
     .rotate([18, 0])
     .translate( [width/2,height/2] );
@@ -67,43 +81,65 @@ var projection = d3.geoConicConformal()
 var geoPath = d3.geoPath()
     .projection(projection);
 
-d3.json("island-simple-1000000-topo.json", process);
+d3.json("island-simple-1000000-topo.json", drawIceland);
 
-function doLegend() {
+
+// Function that draws the legend circles in the legend box for reference
+// Called by renderCircles
+function doLegend(dataLength) {
   var data = [];
-  var parts = 5;
-  var increment = Math.floor(tegundir[selectedTegund][selectedAr].max/parts/Math.pow(10,Math.ceil(Math.log(tegundir[selectedTegund][selectedAr].max/parts + 1) / Math.LN10)-1))*Math.pow(10,Math.ceil(Math.log(tegundir[selectedTegund][selectedAr].max/parts + 1) / Math.LN10)-1);
-
+  var parts = (height < 1000) ? Math.min(3, dataLength): Math.min(5, dataLength);
+  var incr = tegundir[selectedTegund][selectedAr].max/parts;
+  var increment = Math.floor(incr/Math.pow(10,Math.ceil(Math.log(incr + 1) / Math.LN10)-1))*Math.pow(10,Math.ceil(Math.log(incr + 1) / Math.LN10)-1);
 
   for(var i = 0; i < parts; i++)
     data[i] = (i+1)*increment;
 
+  // Radius times 2 = circumference
+  var legendUnit = legend.scaleMax*2;
 
-  var legendUnit = tegundir[selectedTegund][selectedAr].scale(data[4])*2;
-  legends = legend.selectAll(".legends").data(data, function(d,i) { return i;});
+  legends = leftLegend.selectAll(".legends")
+    .data(data, function(d,i) { return parts + "_" + i; });
+
+  var exit = legends.exit();
+    exit
+    .transition()
+    .duration(legend.transition)
+    .select("circle")
+    .attr("r", 0);
+    exit    
+    .remove();
 
   legends
     .transition()
-    .duration(500)
-    .select("circle").attr("r", (d) => (tegundir[selectedTegund][selectedAr].scale(d)))
-  legends.select("text").text((d) => addDot(d));
+    .duration(legend.transition)
+    .select("circle").attr("r", (d) => (tegundir[selectedTegund][selectedAr].scale(d)));
+
+  legends.select("text").text((d) => addDot(d)+' t.');
 
   var enter = legends.enter();
   var gl = enter.append("svg:g").classed("legends", true);
-    gl.append("svg:circle")
-    //.attr("fill", colors[i])
+    gl.append("circle")
     .attr("r", (d) => (tegundir[selectedTegund][selectedAr].scale(d)))
-    //.attr("height", height/16)
-    .attr("cx", height/16 + legendUnit/2 + 15)
-    .attr("cy", (d,i) => ((i+1) * legendUnit) + 170)
+    .attr("cx", legend.margin*2 + legendUnit/2)
+    .attr("cy", (d,i) => ((i+1) * legendUnit) + infoBox.node().getBoundingClientRect().height)
     gl.append("text")
-    .attr("x", (height/10) + legendUnit/2)
-    .attr("y", (d,i ) => ((i+1) * legendUnit) + 170)
-    .attr("dx", "32")
-    .attr("dy", "15")
+    .attr("x", legendUnit)
+    .attr("y", (d,i) => ((i+1) * legendUnit) + infoBox.node().getBoundingClientRect().height)
+    .attr("dx", legendUnit/2)
+    .attr("dy", (height/128))
     .attr("font-family", "arial")
-    .attr("font-size", (height/48) + "px")        
+    .attr("font-size", Math.max(18, (height/64)) + "px")
     .text((d) => addDot(d)+' t.');
+
+    infoText.text(" lönduðu íslensk veiðiskip " + addDot(tegundir[selectedTegund][selectedAr].sum) + " tonnum af ");
+
+    if(tegundir[selectedTegund][selectedAr].innanlands/tegundir[selectedTegund][selectedAr].sum < 1)  {
+      infoText2.text(", þar af var " + addDot(tegundir[selectedTegund][selectedAr].erlendis) + " tonnum landað erlendis.");
+    }
+    else {
+      infoText2.text("");
+    }
 
 }
 
@@ -111,16 +147,30 @@ function processData(data)  {
 
   if(data)  { // Argument only provided on inital page load
     ports = svg.append("svg:g");
-    themax = data.objects.hafnir.geometries;
+    completeDataset = data.objects.hafnir.geometries;
     tegundir = data.objects.tegundir;
 
     var div1 = formContainer.append("xhtml:div").classed("col-auto my-1", true);
-      div1.append("label").classed("mr-sm-2", true).text("�r:");
-    var div2 = formContainer.append("xhtml:div").classed("col-auto my-1", true);
-      div2.append("label").classed("mr-sm-2", true).text("Fisktegund:")
-    var select = div1.append("xhtml:select").classed("custom-select mr-sm-2", true).on("change", function(s) { selectedAr = this.selectedIndex; processData(); });
-    var select2 = div2.append("xhtml:select").classed("custom-select mr-sm-2", true).on("change", function(s) { selectedTegund = this.options[this.selectedIndex].value; processData(); });
+    div1.append("span").text("Árið ")
 
+    var select = div1
+      .append("xhtml:select")
+      .classed("custom-select my-1 mr-sm-2", true)
+      .attr("style", "width: 90px;")
+      .on("change", function(s) { selectedAr = this.selectedIndex; processData(); });
+    
+    infoText = div1.append("span")
+      .classed("text", true)
+      .text("lönduðu íslensk veiðiskip " + addDot(tegundir[selectedTegund][selectedAr].sum) + " tonnum af ");
+
+    var select2 = div1.append("xhtml:select")
+      .classed("custom-select mr-sm-2", true)
+      .attr("style", "max-width: 160px;")
+      .on("change", function(s) { selectedTegund = this.options[this.selectedIndex].value; processData(); });
+
+    infoText2 = div1.append("span")
+      .classed("text", true)
+      .text("");
 
     for(var i = 0; i < 35; i++)  {
       select.append("option").text(2016-i)
@@ -130,7 +180,7 @@ function processData(data)  {
 
     for(var key in data.objects.tegundir)  {
         var c = data.objects.tegundir[key];
-        c.forEach(function(y){ y.scale = d3.scaleLinear().domain([y.min, y.max]).range([10, 60]);})
+        c.forEach(function(y){ y.scale = d3.scaleLinear().domain([y.min, y.max]).range([legend.scaleMin, legend.scaleMax]);})
         array.push(key)
 
     }
@@ -142,14 +192,14 @@ function processData(data)  {
 
   }
   
- render = themax.map((e) => ((e.properties.tegundir[selectedTegund]) ? {type:e.type, properties: {id: e.properties.id, hofn: e.properties.hofn, nafn: e.properties.nafn, afli : e.properties.tegundir[selectedTegund][selectedAr]}, geometry: e.geometry}: null));
+ subDataset = completeDataset.filter((d) => (d.properties.tegundir[selectedTegund])).map((e) => ({type:e.type, properties: {id: e.properties.id, hofn: e.properties.hofn, innanlands: e.properties.innanlands, nafn: e.properties.nafn, afli : e.properties.tegundir[selectedTegund][selectedAr]}, geometry: e.geometry}));
 
- renderCircles(render.filter(function(d) { return (d && d.properties.afli > 0); }));
+ renderCircles(subDataset.filter((d) => (d.properties.innanlands === 1 && d.properties.nafn != 'Ýmsir staðir' && d.properties.afli > 0)).sort((a,b) => (b.properties.afli - a.properties.afli))); // Sorted in order for biggest circles to be drawn first and smaller on top
 
 }
 
 function renderCircles(data)  {  
-  doLegend(); // Redo legend info
+  doLegend(data.length); // Redo legend info
 
   // Start D3 General Update Pattern for fishery data
   circles = ports.selectAll("circle").data(data, function(d) { return d.properties.id;});
@@ -168,13 +218,13 @@ function renderCircles(data)  {
 
   circles.enter()
     .append("circle")
-    .on("click", clicked)
+    //.on("click", clicked)
     .on("mouseover", function(d) { showText(d, this); })
     .on("mouseout", function(d) { text.style("visibility", "hidden");})
     .attr("opacity", "0.4")
     .attr("r", 1)
-    .attr("cx", function(d) { return projection(d.geometry.coordinates)[0];})
-    .attr("cy", function(d) { return projection(d.geometry.coordinates)[1];})
+    .attr("cx", (d) => (projection(d.geometry.coordinates)[0]))
+    .attr("cy", (d) => (projection(d.geometry.coordinates)[1]))
     .transition()
     .duration(1000)
     .attr("r", function(d) {  return (d.properties.afli) ? tegundir[selectedTegund][selectedAr].scale(d.properties.afli): 0;})
@@ -190,7 +240,8 @@ function addDot(n)   {
     return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 }
 
-function process(data)	{
+function drawIceland(data)	{
+    if(width >= 1366) {
     var featureCollection = topojson.feature(data, data.objects["island-geo"]);
 
     // Compute the feature bounds and centroid
@@ -199,10 +250,10 @@ function process(data)	{
         //center = d3.geoCentroid(featureCollection);
 
     var distance = d3.geoDistance(bounds[0], bounds[1]);
-        scale = height / distance;
+        //scale = height / distance;
    // console.log(distance)
     // Update the projection scale and centroid
-    projection.scale(scale*1.3);
+    projection.scale(height / distance*1.4);
 
 
 	g.selectAll( "path" )
@@ -214,40 +265,17 @@ function process(data)	{
     .attr( "stroke", "burlywood")
     .attr( "d", geoPath )
 
-  d3.json("data.json", processData);
+  d3.json("data4.json", processData);
+  }
+  else {
+    alert("Þú ert með of lága upplausn á tölvuskjánum.")
+  }
 
 }
 
 
 function prettyPercent(p, n)   {
     return Math.round(parseFloat(p) * Math.pow(10, n+2))/Math.pow(10,n);
-}
-
-// https://bl.ocks.org/mbostock/2206590
-
-function clicked(d) {
-  var x, y, k;
-
-  if (d && centered !== d) {
-    var centroid = geoPath.centroid(d);
-    x = centroid[0];
-    y = centroid[1];
-    k = 4;
-    centered = d;
-  } else {
-    x = width / 2;
-    y = height / 2;
-    k = 1;
-    centered = null;
-  }
-
-  g.selectAll("path")
-      .classed("active", centered && function(d) { return d === centered; });
-
-  g.transition()
-      .duration(750)
-      .attr("transform", "translate(" + width / 2 + "," + height / 2 + ")scale(" + k + ")translate(" + -x + "," + -y + ")");
-      //.style("stroke-width", 1.5 / k + "px");
 }
 
 	</script>
